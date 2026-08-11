@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>라이브 채팅 추첨 제어판</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<h1>라이브 채팅 키워드 추첨 → 룰렛 연동</h1>
+
+<section class="card">
+  <h2>0. YouTube API 키 설정</h2>
+  <p class="hint">
+    아직 키가 없다면 <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>에서
+    발급받아 아래에 붙여넣으세요. 파일을 직접 만들 필요 없이 여기서 저장하면 바로 적용됩니다. (발급 방법은 SETUP_WINDOWS.md 참고)
+  </p>
+  <div class="row">
+    <input id="apiKeyInput" type="password" placeholder="YouTube API 키를 붙여넣으세요" />
+    <button id="saveApiKeyBtn">저장</button>
+  </div>
+  <p id="apiKeyStatus" class="hint">확인 중...</p>
+</section>
+
+<section class="card">
+  <h2>1. 라이브 연결</h2>
+  <div class="row">
+    <input id="videoUrl" type="text" placeholder="유튜브 라이브 URL 또는 videoId" />
+    <button id="connectBtn">연결</button>
+  </div>
+  <p id="connectionInfo" class="hint">아직 연결되지 않았습니다.</p>
+</section>
+
+<section class="card">
+  <h2>2. 수집 설정</h2>
+  <div class="row">
+    <input id="keyword" type="text" placeholder="예: 참여" />
+    <select id="matchMode">
+      <option value="exact">정확히 일치</option>
+      <option value="contains">포함</option>
+    </select>
+  </div>
+  <div class="row">
+    <label class="hint" for="durationMinutes">수집 시간</label>
+    <input id="durationMinutes" type="number" placeholder="분" min="0" style="max-width: 80px" />
+    <input id="durationSeconds" type="number" placeholder="초" min="0" max="59" style="max-width: 80px" />
+    <span class="hint">(둘 다 비우면 수동 종료)</span>
+  </div>
+  <div class="row">
+    <button id="startBtn">수집 시작</button>
+    <button id="stopBtn">수집 종료</button>
+    <button id="resetBtn" class="danger">리셋</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2>3. 실시간 현황</h2>
+  <p>상태: <span id="state" class="badge">idle</span> · 매칭 인원: <span id="count">0</span>명</p>
+  <p id="errorMsg" class="error"></p>
+  <ul id="participantList" class="list"></ul>
+</section>
+
+<section class="card">
+  <h2>4. 자동 바이인</h2>
+  <textarea id="manualNames" rows="2" placeholder="쉼표(,)로 구분해서 추가 인원을 입력하세요"></textarea>
+  <div class="row">
+    <button id="addManualBtn">추가</button>
+    <button id="clearManualBtn" class="danger">자동 바이인 초기화</button>
+  </div>
+  <p class="hint">현재 자동 바이인 (리셋해도 유지됩니다): <span id="manualList"></span></p>
+</section>
+
+<section class="card">
+  <h2>5. 룰렛 연동</h2>
+  <p class="hint">최종 인원(수집 + 자동 바이인): <span id="finalCount">0</span>명. 처음 반영 시 룰렛 페이지가 새로 열립니다.</p>
+  <p class="hint">아래는 룰렛 입력창에 붙여넣는 것과 동일한 형식(쉼표 구분, 동명이인은 이름*횟수)입니다.</p>
+  <textarea id="finalList" rows="3" readonly></textarea>
+  <div class="row">
+    <button id="injectBtn">룰렛에 반영</button>
+    <button id="rouletteStartBtn">룰렛 시작</button>
+  </div>
+</section>
+
+<script src="dashboard.js"></script>
+</body>
+</html>
