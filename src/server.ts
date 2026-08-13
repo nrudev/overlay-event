@@ -1,32 +1,70 @@
-import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { URL } from 'node:url';
 import path from 'node:path';
-import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { Collector } from './collector.js';
-import { RouletteAutomation } from './rouletteAutomation.js';
 import { extractVideoId, resolveLiveChatId, LiveChatPoller } from './youtube.js';
 import type { MatchMode } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ENV_PATH = path.join(__dirname, '..', '.env');
 const PORT = Number(process.env.PORT) || 5175;
 
-// 대시보드 화면에서 붙여넣은 키를 즉시 반영하고 .env 파일에도 저장해서,
-// 사용자가 직접 .env 파일을 만들거나 편집하지 않아도 되게 한다.
-let apiKey: string | null = process.env.YOUTUBE_API_KEY || null;
+const SESSION_HEADER = 'x-session-id';
+const SESSION_IDLE_MS = 3 * 60 * 60 * 1000; // 3시간 미사용 세션 정리
+const SESSION_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 
-function persistApiKeyToEnvFile(key: string): void {
-  const existing = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf-8') : '';
-  const lines = existing
-    .split(/\r?\n/)
-    .filter((line) => line.trim() !== '' && !line.startsWith('YOUTUBE_API_KEY='));
-  lines.push(`YOUTUBE_API_KEY=${key}`);
-  fs.writeFileSync(ENV_PATH, lines.join('\n') + '\n', 'utf-8');
+interface Session {
+  collector: Collector;
+  poller: LiveChatPoller | null;
+  connection: { videoId: string; liveChatId: string } | null;
+  sockets: Set<WebSocket>;
+  lastActive: number;
 }
+
+// 로그인 없이 여러 사용자가 같은 서버를 동시에 쓰므로, 브라우저가 생성한 세션 ID별로
+// 수집 상태와 라이브 연결을 완전히 분리해서 보관한다. API 키도 세션에 잠깐 머무를 뿐
+// 디스크에는 저장하지 않는다(사용자 브라우저의 localStorage에만 저장됨).
+const sessions = new Map<string, Session>();
+
+function getOrCreateSession(sessionId: string): Session {
+  let session = sessions.get(sessionId);
+  if (!session) {
+    session = {
+      collector: new Collector(),
+      poller: null,
+      connection: null,
+      sockets: new Set(),
+      lastActive: Date.now(),
+    };
+    session.collector.on('update', (status) => {
+      broadcast(session!, 'status', status);
+    });
+    sessions.set(sessionId, session);
+  }
+  session.lastActive = Date.now();
+  return session;
+}
+
+function broadcast(session: Session, type: string, payload: unknown): void {
+  const data = JSON.stringify({ type, payload });
+  for (const socket of session.sockets) {
+    if (socket.readyState === WebSocket.OPEN) socket.send(data);
+  }
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of sessions) {
+    if (now - session.lastActive > SESSION_IDLE_MS) {
+      session.poller?.stop();
+      for (const socket of session.sockets) socket.close();
+      sessions.delete(id);
+    }
+  }
+}, SESSION_SWEEP_INTERVAL_MS).unref();
 
 const app = express();
 app.use(express.json());
@@ -35,77 +73,63 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
 
-const collector = new Collector();
-const roulette = new RouletteAutomation();
-
-let poller: LiveChatPoller | null = null;
-let connection: { videoId: string; liveChatId: string } | null = null;
-
-function broadcast(type: string, payload: unknown): void {
-  const data = JSON.stringify({ type, payload });
-  for (const client of wss.clients) {
-    if (client.readyState === WebSocket.OPEN) client.send(data);
-  }
-}
-
-collector.on('update', (status) => broadcast('status', status));
-
-wss.on('connection', (socket) => {
-  socket.send(JSON.stringify({ type: 'status', payload: collector.getStatus() }));
-  socket.send(JSON.stringify({ type: 'connection', payload: connection }));
-});
-
-function requireApiKey(res: express.Response): boolean {
-  if (!apiKey) {
-    res.status(500).json({ error: 'YouTube API 키가 설정되지 않았습니다. 위쪽 "API 키 설정"에서 먼저 저장하세요.' });
-    return false;
-  }
-  return true;
-}
-
-app.get('/api/settings', (_req, res) => {
-  res.json({ hasApiKey: Boolean(apiKey) });
-});
-
-app.post('/api/settings/api-key', (req, res) => {
-  const { apiKey: newKey } = req.body as { apiKey: string };
-  if (!newKey?.trim()) {
-    res.status(400).json({ error: 'API 키를 입력하세요.' });
+wss.on('connection', (socket, req) => {
+  const sessionId = new URL(req.url ?? '', 'http://localhost').searchParams.get('session');
+  if (!sessionId) {
+    socket.close();
     return;
   }
-  apiKey = newKey.trim();
-  try {
-    persistApiKeyToEnvFile(apiKey);
-  } catch (err) {
-    console.warn('.env 파일 저장에 실패했습니다 (이번 실행에는 계속 적용됩니다):', err);
-  }
-  res.json({ hasApiKey: true });
+  const session = getOrCreateSession(sessionId);
+  session.sockets.add(socket);
+  socket.on('close', () => session.sockets.delete(socket));
+
+  socket.send(JSON.stringify({ type: 'status', payload: session.collector.getStatus() }));
+  socket.send(JSON.stringify({ type: 'connection', payload: session.connection }));
 });
 
-app.post('/api/connect', async (req, res) => {
-  if (!requireApiKey(res)) return;
-  try {
-    const { videoUrl } = req.body as { videoUrl: string };
-    const videoId = extractVideoId(videoUrl);
-    const liveChatId = await resolveLiveChatId(videoId, apiKey!);
+function requireSession(req: express.Request, res: express.Response): Session | null {
+  const sessionId = req.header(SESSION_HEADER);
+  if (!sessionId) {
+    res.status(400).json({ error: '세션 ID가 없습니다 (X-Session-Id 헤더 필요).' });
+    return null;
+  }
+  return getOrCreateSession(sessionId);
+}
 
-    poller?.stop();
-    poller = new LiveChatPoller(apiKey!, liveChatId);
-    poller.start(
-      (messages) => collector.ingest(messages),
-      (err) => collector.setError(err.message)
+app.post('/api/connect', async (req, res) => {
+  const session = requireSession(req, res);
+  if (!session) return;
+
+  const { videoUrl, apiKey } = req.body as { videoUrl: string; apiKey: string };
+  if (!apiKey?.trim()) {
+    res.status(400).json({ error: 'YouTube API 키를 먼저 입력하세요.' });
+    return;
+  }
+
+  try {
+    const videoId = extractVideoId(videoUrl);
+    const liveChatId = await resolveLiveChatId(videoId, apiKey);
+
+    session.poller?.stop();
+    session.poller = new LiveChatPoller(apiKey, liveChatId);
+    session.poller.start(
+      (messages) => session.collector.ingest(messages),
+      (err) => session.collector.setError(err.message)
     );
 
-    connection = { videoId, liveChatId };
-    broadcast('connection', connection);
-    res.json(connection);
+    session.connection = { videoId, liveChatId };
+    broadcast(session, 'connection', session.connection);
+    res.json(session.connection);
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
 app.post('/api/collect/start', (req, res) => {
-  if (!connection) {
+  const session = requireSession(req, res);
+  if (!session) return;
+
+  if (!session.connection) {
     res.status(400).json({ error: '먼저 라이브 영상을 연결하세요.' });
     return;
   }
@@ -118,57 +142,45 @@ app.post('/api/collect/start', (req, res) => {
     res.status(400).json({ error: '키워드를 입력하세요.' });
     return;
   }
-  collector.start(keyword, matchMode === 'contains' ? 'contains' : 'exact', durationSeconds ?? null);
-  res.json(collector.getStatus());
+  session.collector.start(keyword, matchMode === 'contains' ? 'contains' : 'exact', durationSeconds ?? null);
+  res.json(session.collector.getStatus());
 });
 
-app.post('/api/collect/stop', (_req, res) => {
-  collector.stop();
-  res.json(collector.getStatus());
+app.post('/api/collect/stop', (req, res) => {
+  const session = requireSession(req, res);
+  if (!session) return;
+  session.collector.stop();
+  res.json(session.collector.getStatus());
 });
 
 app.post('/api/collect/manual', (req, res) => {
+  const session = requireSession(req, res);
+  if (!session) return;
   const { names } = req.body as { names: string[] };
-  collector.addManualNames(Array.isArray(names) ? names : []);
-  res.json(collector.getStatus());
+  session.collector.addManualNames(Array.isArray(names) ? names : []);
+  res.json(session.collector.getStatus());
 });
 
-app.post('/api/collect/manual/clear', (_req, res) => {
-  collector.clearManualNames();
-  res.json(collector.getStatus());
+app.post('/api/collect/manual/clear', (req, res) => {
+  const session = requireSession(req, res);
+  if (!session) return;
+  session.collector.clearManualNames();
+  res.json(session.collector.getStatus());
 });
 
-app.post('/api/collect/reset', (_req, res) => {
-  collector.reset();
-  res.json(collector.getStatus());
+app.post('/api/collect/reset', (req, res) => {
+  const session = requireSession(req, res);
+  if (!session) return;
+  session.collector.reset();
+  res.json(session.collector.getStatus());
 });
 
-app.post('/api/roulette/inject', async (_req, res) => {
-  try {
-    const names = collector.getFinalNames();
-    await roulette.injectNames(names);
-    res.json({ injected: names.length });
-  } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-app.post('/api/roulette/start', async (_req, res) => {
-  try {
-    await roulette.triggerStart();
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-app.get('/api/status', (_req, res) => {
-  res.json({ status: collector.getStatus(), connection });
+app.get('/api/status', (req, res) => {
+  const session = requireSession(req, res);
+  if (!session) return;
+  res.json({ status: session.collector.getStatus(), connection: session.connection });
 });
 
 httpServer.listen(PORT, () => {
   console.log(`대시보드: http://localhost:${PORT}`);
-  if (!apiKey) {
-    console.warn('안내: YouTube API 키가 아직 없습니다. 대시보드 화면 상단 "API 키 설정"에서 입력하세요.');
-  }
 });

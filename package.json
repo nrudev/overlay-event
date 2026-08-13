@@ -10,9 +10,7 @@
     "test:collector": "tsx src/collector.test.ts"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "playwright": "^1.47.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

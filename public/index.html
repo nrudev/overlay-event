@@ -12,7 +12,8 @@
   <h2>0. YouTube API 키 설정</h2>
   <p class="hint">
     아직 키가 없다면 <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>에서
-    발급받아 아래에 붙여넣으세요. 파일을 직접 만들 필요 없이 여기서 저장하면 바로 적용됩니다. (발급 방법은 SETUP_WINDOWS.md 참고)
+    발급받아 아래에 붙여넣으세요. 이 키는 서버로 전송되어 그 요청을 처리하는 동안만 사용되고,
+    <b>이 브라우저에만(localStorage)</b> 저장됩니다 — 다른 사용자와 공유되지 않습니다.
   </p>
   <div class="row">
     <input id="apiKeyInput" type="password" placeholder="YouTube API 키를 붙여넣으세요" />
@@ -52,6 +53,11 @@
   </div>
 </section>
 
+<div id="timerBox" class="card timer-box hidden">
+  <div id="timerLabel" class="timer-label">남은 시간</div>
+  <div id="timerDisplay" class="timer-display">00:00</div>
+</div>
+
 <section class="card">
   <h2>3. 실시간 현황</h2>
   <p>상태: <span id="state" class="badge">idle</span> · 매칭 인원: <span id="count">0</span>명</p>
@@ -71,13 +77,14 @@
 
 <section class="card">
   <h2>5. 룰렛 연동</h2>
-  <p class="hint">최종 인원(수집 + 자동 바이인): <span id="finalCount">0</span>명. 처음 반영 시 룰렛 페이지가 새로 열립니다.</p>
-  <p class="hint">아래는 룰렛 입력창에 붙여넣는 것과 동일한 형식(쉼표 구분, 동명이인은 이름*횟수)입니다.</p>
+  <p class="hint">최종 인원(수집 + 자동 바이인): <span id="finalCount">0</span>명.</p>
+  <p class="hint">아래는 룰렛 입력창에 붙여넣는 것과 동일한 형식(쉼표 구분, 동명이인은 이름*횟수)입니다. 복사해서 룰렛 페이지의 입력창에 붙여넣으세요.</p>
   <textarea id="finalList" rows="3" readonly></textarea>
   <div class="row">
-    <button id="injectBtn">룰렛에 반영</button>
-    <button id="rouletteStartBtn">룰렛 시작</button>
+    <button id="copyListBtn">명단 복사</button>
+    <button id="openRouletteBtn">룰렛 페이지 열기</button>
   </div>
+  <p id="copyStatus" class="hint"></p>
 </section>
 
 <script src="dashboard.js"></script>

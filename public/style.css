@@ -78,3 +78,16 @@ button.danger:hover { background: #6b3040; }
   justify-content: space-between;
 }
 .list li span.msg { color: #9aa4b2; }
+
+.timer-box {
+  text-align: center;
+}
+.timer-box.hidden { display: none; }
+.timer-label { color: #9aa4b2; font-size: 13px; margin-bottom: 4px; }
+.timer-display {
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #3b6ef5;
+  font-variant-numeric: tabular-nums;
+}

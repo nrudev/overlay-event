@@ -1,12 +1,35 @@
 const $ = (id) => document.getElementById(id);
 
+const ROULETTE_URL = 'https://lazygyu.github.io/roulette/';
+const API_KEY_STORAGE_KEY = 'overlay-event:youtubeApiKey';
+const SESSION_ID_STORAGE_KEY = 'overlay-event:sessionId';
+
 let latestStatus = null;
+let previousState = null;
+let timerInterval = null;
 
 const STATE_LABELS = {
   idle: '대기 중',
   collecting: '수집 중',
   collected: '수집 완료',
 };
+
+function getSessionId() {
+  let id = localStorage.getItem(SESSION_ID_STORAGE_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(SESSION_ID_STORAGE_KEY, id);
+  }
+  return id;
+}
+
+function getApiKey() {
+  return localStorage.getItem(API_KEY_STORAGE_KEY) ?? '';
+}
+
+function setApiKey(key) {
+  localStorage.setItem(API_KEY_STORAGE_KEY, key);
+}
 
 function render(status) {
   latestStatus = status;
@@ -33,6 +56,60 @@ function render(status) {
     $('keyword').value = status.keyword;
     $('matchMode').value = status.matchMode;
   }
+
+  updateTimerVisibility(status);
+
+  if (previousState === 'collecting' && status.state === 'collected') {
+    playAlarmSound();
+  }
+  previousState = status.state;
+}
+
+function formatClock(totalSeconds) {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function tickTimer() {
+  if (!latestStatus || latestStatus.state !== 'collecting') return;
+  const now = Date.now();
+  if (latestStatus.endsAt) {
+    $('timerLabel').textContent = '남은 시간';
+    $('timerDisplay').textContent = formatClock((latestStatus.endsAt - now) / 1000);
+  } else if (latestStatus.startedAt) {
+    $('timerLabel').textContent = '경과 시간';
+    $('timerDisplay').textContent = formatClock((now - latestStatus.startedAt) / 1000);
+  }
+}
+
+function updateTimerVisibility(status) {
+  if (status.state === 'collecting') {
+    $('timerBox').classList.remove('hidden');
+    tickTimer();
+    if (!timerInterval) timerInterval = setInterval(tickTimer, 1000);
+  } else {
+    $('timerBox').classList.add('hidden');
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+}
+
+const ALARM_SOUND_URL = 'sounds/alarm.mp3';
+
+function playAlarmSound() {
+  try {
+    const audio = new Audio(ALARM_SOUND_URL);
+    audio.play().catch((err) => console.error('알람 소리 재생 실패', err));
+  } catch (err) {
+    console.error('알람 소리 재생 실패', err);
+  }
 }
 
 function formatRouletteNames(names) {
@@ -48,7 +125,7 @@ function escapeHtml(str) {
 }
 
 function connectWs() {
-  const ws = new WebSocket(`ws://${location.host}`);
+  const ws = new WebSocket(`ws://${location.host}/?session=${getSessionId()}`);
   ws.onmessage = (event) => {
     const { type, payload } = JSON.parse(event.data);
     if (type === 'status') render(payload);
@@ -63,7 +140,7 @@ connectWs();
 async function post(url, body) {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Session-Id': getSessionId() },
     body: JSON.stringify(body ?? {}),
   });
   const data = await res.json();
@@ -78,7 +155,7 @@ $('connectBtn').addEventListener('click', async () => {
   const videoUrl = $('videoUrl').value.trim();
   if (!videoUrl) return;
   try {
-    const data = await post('/api/connect', { videoUrl });
+    const data = await post('/api/connect', { videoUrl, apiKey: getApiKey() });
     $('connectionInfo').textContent = `연결됨: videoId=${data.videoId}`;
   } catch {}
 });
@@ -108,24 +185,32 @@ $('addManualBtn').addEventListener('click', async () => {
 
 $('clearManualBtn').addEventListener('click', () => post('/api/collect/manual/clear').catch(() => {}));
 
-$('injectBtn').addEventListener('click', () => post('/api/roulette/inject').catch(() => {}));
-$('rouletteStartBtn').addEventListener('click', () => post('/api/roulette/start').catch(() => {}));
+$('copyListBtn').addEventListener('click', async () => {
+  const text = $('finalList').value;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    $('copyStatus').textContent = '✅ 복사했습니다. 룰렛 페이지 입력창에 붙여넣으세요.';
+  } catch {
+    $('copyStatus').textContent = '복사에 실패했습니다. 위 칸을 직접 선택해서 복사해주세요.';
+  }
+});
 
-async function refreshApiKeyStatus() {
-  const res = await fetch('/api/settings');
-  const data = await res.json();
-  $('apiKeyStatus').textContent = data.hasApiKey
-    ? '✅ API 키가 설정되어 있습니다.'
+$('openRouletteBtn').addEventListener('click', () => {
+  window.open(ROULETTE_URL, '_blank', 'noopener');
+});
+
+function refreshApiKeyStatus() {
+  $('apiKeyStatus').textContent = getApiKey()
+    ? '✅ 이 브라우저에 API 키가 저장되어 있습니다.'
     : '⚠️ 아직 API 키가 설정되지 않았습니다. 위 칸에 붙여넣고 저장하세요.';
 }
 refreshApiKeyStatus();
+$('apiKeyInput').value = getApiKey();
 
-$('saveApiKeyBtn').addEventListener('click', async () => {
+$('saveApiKeyBtn').addEventListener('click', () => {
   const apiKey = $('apiKeyInput').value.trim();
   if (!apiKey) return;
-  try {
-    await post('/api/settings/api-key', { apiKey });
-    $('apiKeyInput').value = '';
-    $('apiKeyStatus').textContent = '✅ API 키가 저장되었습니다.';
-  } catch {}
+  setApiKey(apiKey);
+  refreshApiKeyStatus();
 });
