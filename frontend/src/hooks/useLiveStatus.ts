@@ -16,7 +16,8 @@ export function useLiveStatus() {
     let closedByCleanup = false;
 
     function connect() {
-      ws = new WebSocket(`ws://${location.host}/ws?session=${getSessionId()}`);
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws?session=${getSessionId()}`);
       ws.onmessage = (event) => {
         const { type, payload } = JSON.parse(event.data);
         if (type === 'status') setStatus(payload);
