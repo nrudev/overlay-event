@@ -75,6 +75,10 @@ app.use('/guide', express.static(path.join(__dirname, '..', '가이드')));
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
 
+// ws 소켓의 'error' 이벤트를 처리하지 않으면 Node가 예외를 던져 서버 전체가 죽는다
+// (한 사용자의 연결 문제가 다른 모든 사용자의 세션까지 끊어버리게 됨).
+wss.on('error', (err) => console.error('WebSocketServer 오류', err));
+
 wss.on('connection', (socket, req) => {
   const sessionId = new URL(req.url ?? '', 'http://localhost').searchParams.get('session');
   if (!sessionId) {
@@ -84,6 +88,7 @@ wss.on('connection', (socket, req) => {
   const session = getOrCreateSession(sessionId);
   session.sockets.add(socket);
   socket.on('close', () => session.sockets.delete(socket));
+  socket.on('error', (err) => console.error('WebSocket 연결 오류', err));
 
   socket.send(JSON.stringify({ type: 'status', payload: session.collector.getStatus() }));
   socket.send(JSON.stringify({ type: 'connection', payload: session.connection }));
