@@ -10,7 +10,7 @@ export function CollectSettingsCard({
   onError: (message: string) => void;
 }) {
   const [keyword, setKeyword] = useState('');
-  const [matchMode, setMatchMode] = useState<MatchMode>('exact');
+  const [matchMode, setMatchMode] = useState<MatchMode>('contains');
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
 
@@ -88,8 +88,8 @@ export function CollectSettingsCard({
         <span className="hint">(둘 다 비우면 수동 종료)</span>
       </div>
       <div className="row">
-        <button onClick={handleStart}>수집 시작</button>
-        <button onClick={handleStop}>수집 종료</button>
+        <button onClick={handleStart}>시작</button>
+        <button onClick={handleStop}>종료</button>
         <button className="danger" onClick={handleReset}>
           리셋
         </button>
