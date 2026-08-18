@@ -64,24 +64,27 @@ export function CollectSettingsCard({
         <label className="hint" htmlFor="durationMinutes">
           수집 시간
         </label>
-        <input
-          id="durationMinutes"
-          type="number"
-          placeholder="분"
-          min={0}
-          style={{ maxWidth: 80 }}
-          value={minutes}
-          onChange={(e) => setMinutes(e.target.value)}
-        />
-        <input
-          type="number"
-          placeholder="초"
-          min={0}
-          max={59}
-          style={{ maxWidth: 80 }}
-          value={seconds}
-          onChange={(e) => setSeconds(e.target.value)}
-        />
+        <div className="duration-inputs">
+          <input
+            id="durationMinutes"
+            type="number"
+            placeholder="분"
+            min={0}
+            style={{ maxWidth: 80 }}
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+          />
+          <span>:</span>
+          <input
+            type="number"
+            placeholder="초"
+            min={0}
+            max={59}
+            style={{ maxWidth: 80 }}
+            value={seconds}
+            onChange={(e) => setSeconds(e.target.value)}
+          />
+        </div>
         <span className="hint">(둘 다 비우면 수동 종료)</span>
       </div>
       <div className="row">
