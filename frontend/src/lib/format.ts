@@ -11,5 +11,5 @@ export function formatClock(totalSeconds: number): string {
 export function formatRouletteNames(names: string[]): string {
   const counts = new Map<string, number>();
   for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
-  return [...counts.entries()].map(([name, count]) => (count > 1 ? `${name}*${count}` : name)).join(',');
+  return [...counts.entries()].map(([name, count]) => (count > 1 ? `${name}*${count}` : name)).join(', ');
 }
