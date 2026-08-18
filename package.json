@@ -8,6 +8,7 @@
     "dev:server": "tsx watch src/server.ts",
     "dev:web": "npm run dev --prefix frontend",
     "start": "tsx src/server.ts",
+    "postinstall": "npm install --prefix frontend",
     "build": "npm run build --prefix frontend && tsc",
     "test:collector": "tsx src/collector.test.ts"
   },
