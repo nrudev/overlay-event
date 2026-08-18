@@ -7,9 +7,10 @@ export function useTimer(status: CollectorStatus | null) {
 
   useEffect(() => {
     if (status?.state !== 'collecting') return;
+    setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [status?.state]);
+  }, [status?.state, status?.endsAt, status?.startedAt]);
 
   if (!status || status.state !== 'collecting') return null;
 
