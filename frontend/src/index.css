@@ -82,7 +82,6 @@ button.danger:hover { background: #6b3040; }
 .timer-box {
   text-align: center;
 }
-.timer-box.hidden { display: none; }
 .timer-label { color: #9aa4b2; font-size: 13px; margin-bottom: 4px; }
 .timer-display {
   font-size: 64px;

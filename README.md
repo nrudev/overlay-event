@@ -29,14 +29,27 @@
 
 ## 2. 서버 설치 및 실행
 
+화면(프론트엔드)은 `frontend/` 아래 React + TypeScript(Vite) 프로젝트로 따로 관리됩니다.
+
 ```bash
 npm install
+cd frontend && npm install && cd ..
 npm run dev
 ```
 
-`PORT` 환경변수로 포트를 바꿀 수 있습니다(기본 5175). 예: `PORT=3000 npm run dev`
+`npm run dev`는 API/WebSocket 서버(Express, 기본 5175)와 화면 개발 서버(Vite, 기본 5173)를 동시에 띄웁니다.
+개발 중에는 **Vite 서버 주소(`http://localhost:5173`)로 접속**하세요 — API 요청과 WebSocket은 Vite가 자동으로
+Express 서버로 프록시합니다.
 
-브라우저에서 서버 주소(예: `http://localhost:5175`, 또는 실제로 배포한 도메인)로 접속합니다.
+배포/운영 시에는 화면을 미리 빌드해서 Express 서버 하나로 서빙합니다.
+
+```bash
+npm run build   # frontend/dist 생성 + 백엔드 타입체크
+npm run start
+```
+
+이 경우 브라우저에서 Express 서버 주소(예: `http://localhost:5175`, 또는 실제로 배포한 도메인)로 접속합니다.
+`PORT` 환경변수로 Express 포트를 바꿀 수 있습니다. 예: `PORT=3000 npm run start`
 
 ## 3. 사용 방법
 
@@ -59,7 +72,7 @@ npm run dev
 - 세션 ID는 브라우저 `localStorage` 기준이므로, 같은 사람이라도 시크릿 창이나 다른 브라우저로 접속하면
   별도 세션으로 취급됩니다. 반대로 `localStorage`를 지우면 진행 중이던 수집 상태를 다시 불러올 수 없습니다
   (서버에는 여전히 남아있지만 새 세션 ID로는 접근할 수 없음).
-- 수집 종료 알람음(`public/sounds/alarm.mp3`)은 Pixabay의
+- 수집 종료 알람음(`frontend/public/sounds/alarm.mp3`)은 Pixabay의
   ["Bedside clock alarm"](https://pixabay.com/sound-effects/household-bedside-clock-alarm-95792/)을
   Pixabay Content License(출처 표시 불필요, 자유 이용)에 따라 앞부분 3초만 잘라 사용했습니다.
 
