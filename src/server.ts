@@ -69,6 +69,8 @@ setInterval(() => {
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
+// express 라우터가 non-ASCII 마운트 경로를 제대로 매칭하지 못해(path-to-regexp 이슈) 영문 경로로 마운트한다.
+app.use('/guide', express.static(path.join(__dirname, '..', '가이드')));
 
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
